@@ -1,8 +1,7 @@
-import type { Assignment, PlayerSession } from '../types'
+import type { DeckCycle, DeckLocalState, PlayerSession } from '../types'
 
 const SESSION_KEY = 'icebreaker:player-session'
-const ASSIGNMENT_KEY = 'icebreaker:assignment'
-const WINNER_KEY = 'icebreaker:winner-mark'
+const DECK_STATE_KEY = 'icebreaker:deck-state'
 
 function parseJSON<T>(raw: string | null): T | null {
   if (!raw) {
@@ -34,23 +33,49 @@ export function setPlayerSession(session: PlayerSession): void {
 
 export function clearPlayerSession(): void {
   window.localStorage.removeItem(SESSION_KEY)
-  window.localStorage.removeItem(ASSIGNMENT_KEY)
-  window.localStorage.removeItem(WINNER_KEY)
+  window.localStorage.removeItem(DECK_STATE_KEY)
 }
 
-export function getAssignment(): Assignment | null {
-  return parseJSON<Assignment>(window.localStorage.getItem(ASSIGNMENT_KEY))
+const DEFAULT_DECK_STATE: DeckLocalState = {
+  answeredCardIds: [],
+  skippedCardIds: [],
+  currentCycle: 'initial',
 }
 
-export function setAssignment(assignment: Assignment): void {
-  window.localStorage.setItem(ASSIGNMENT_KEY, JSON.stringify(assignment))
+export function getDeckState(): DeckLocalState {
+  return parseJSON<DeckLocalState>(window.localStorage.getItem(DECK_STATE_KEY)) ?? DEFAULT_DECK_STATE
 }
 
-export function hasWinnerMark(sessionId: string): boolean {
-  const value = window.localStorage.getItem(WINNER_KEY)
-  return value === sessionId
+export function setDeckState(next: DeckLocalState): void {
+  window.localStorage.setItem(DECK_STATE_KEY, JSON.stringify(next))
 }
 
-export function setWinnerMark(sessionId: string): void {
-  window.localStorage.setItem(WINNER_KEY, sessionId)
+export function resetDeckState(): void {
+  setDeckState(DEFAULT_DECK_STATE)
+}
+
+export function markAnswered(cardId: string): DeckLocalState {
+  const state = getDeckState()
+  if (!state.answeredCardIds.includes(cardId)) {
+    state.answeredCardIds.push(cardId)
+  }
+  state.skippedCardIds = state.skippedCardIds.filter((id) => id !== cardId)
+  setDeckState(state)
+  return state
+}
+
+export function markSkipped(cardId: string): DeckLocalState {
+  const state = getDeckState()
+  if (!state.skippedCardIds.includes(cardId) && !state.answeredCardIds.includes(cardId)) {
+    state.skippedCardIds.push(cardId)
+  }
+  setDeckState(state)
+  return state
+}
+
+export function setDeckCycle(cycle: DeckCycle): DeckLocalState {
+  const state = getDeckState()
+  state.currentCycle = cycle
+  setDeckState(state)
+  return state
 }

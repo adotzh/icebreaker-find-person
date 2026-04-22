@@ -4,5 +4,9 @@ type StatusBannerProps = {
 }
 
 export function StatusBanner({ variant, message }: StatusBannerProps) {
-  return <p className={`status-banner status-banner--${variant}`}>{message}</p>
+  return (
+    <p className={`status-banner status-banner--${variant}`} role="status" aria-live="polite">
+      {message}
+    </p>
+  )
 }

@@ -16,8 +16,13 @@ export function NameEntryForm({ disabled, onSubmit }: NameEntryFormProps) {
 
   return (
     <form className="card" onSubmit={handleSubmit}>
-      <h2>Start the Icebreaker</h2>
-      <p>Enter your full name so we can match you in the guest list.</p>
+      <div className="card-header">
+        <p className="section-kicker">Step 1</p>
+        <h2>Enter your name</h2>
+      </div>
+      <p className="card-description">
+        Use your full name as listed by the host to unlock your private challenge.
+      </p>
       <label className="field">
         <span>Your name</span>
         <input
@@ -29,7 +34,7 @@ export function NameEntryForm({ disabled, onSubmit }: NameEntryFormProps) {
           disabled={disabled}
         />
       </label>
-      <button type="submit" disabled={disabled}>
+      <button type="submit" disabled={disabled} className="button-primary">
         Find my challenge
       </button>
     </form>

@@ -1,211 +1,328 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchGuests, logAttempt, logWinner } from './api/client'
-import { AnswerForm } from './components/AnswerForm'
-import { ChallengeCard } from './components/ChallengeCard'
-import { NameEntryForm } from './components/NameEntryForm'
+import {
+  activateProfile,
+  getDeck,
+  getProfile,
+  refreshDeck,
+  selectCardsForCycle,
+  skipCard,
+  submitGuess,
+} from './api/client'
+import { ActivationCard } from './components/ActivationCard'
+import { DeckEmptyState } from './components/DeckEmptyState'
+import { GuestFactCard } from './components/GuestFactCard'
+import { SkipConfirmDialog } from './components/SkipConfirmDialog'
 import { StatusBanner } from './components/StatusBanner'
-import { isNameMatch, matchGuestByName, pickTargetGuest } from './lib/matching'
 import {
   clearPlayerSession,
   createSessionId,
-  getAssignment,
+  getDeckState,
   getPlayerSession,
-  hasWinnerMark,
-  setAssignment,
+  markAnswered,
+  markSkipped,
+  resetDeckState,
+  setDeckCycle,
   setPlayerSession,
-  setWinnerMark,
 } from './lib/storage'
-import type { Assignment, Guest, PlayerSession } from './types'
+import type { DeckCard, DeckCycle, DeckLocalState, Guest, PlayerSession } from './types'
 
 function App() {
-  const [guests, setGuests] = useState<Guest[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [activating, setActivating] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [status, setStatus] = useState<{
     message: string
     variant: 'info' | 'success' | 'error'
-  } | null>(null)
+  } | null>({
+    message: 'Activate your profile to join the game and receive guest cards.',
+    variant: 'info',
+  })
+  const [nameInput, setNameInput] = useState('')
+  const [factInput, setFactInput] = useState('')
+  const [profile, setProfile] = useState<Guest | null>(null)
+  const [deckCards, setDeckCards] = useState<DeckCard[]>([])
+  const [guessInput, setGuessInput] = useState('')
+  const [showSkipDialog, setShowSkipDialog] = useState(false)
 
   const [playerSession, setPlayerSessionState] = useState<PlayerSession | null>(() =>
     getPlayerSession(),
   )
-  const [assignment, setAssignmentState] = useState<Assignment | null>(() => {
-    const existingSession = getPlayerSession()
-    const existingAssignment = getAssignment()
-    if (!existingAssignment) {
-      return null
-    }
+  const [deckState, setDeckStateState] = useState<DeckLocalState>(() => getDeckState())
 
-    if (existingSession && existingAssignment.sessionId !== existingSession.sessionId) {
-      return null
-    }
-
-    return existingAssignment
-  })
-
-  useEffect(() => {
-    const loadGuests = async () => {
-      try {
-        setLoading(true)
-        const loadedGuests = await fetchGuests()
-        setGuests(loadedGuests)
-        setStatus({ message: 'Guest list is ready. Enter your name to begin.', variant: 'info' })
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to load guests.'
-        setStatus({ message, variant: 'error' })
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    void loadGuests()
-  }, [])
-
-  const assignedGuest = useMemo(
-    () => guests.find((guest) => guest.id === assignment?.targetGuestId) ?? null,
-    [assignment, guests],
+  const activeCards = useMemo(
+    () =>
+      selectCardsForCycle(
+        deckCards,
+        deckState.answeredCardIds,
+        deckState.skippedCardIds,
+        deckState.currentCycle,
+      ),
+    [deckCards, deckState],
   )
+  const currentCard = activeCards[0] ?? null
 
-  const handleNameSubmit = (playerNameRaw: string) => {
-    if (loading || guests.length === 0) {
+  const loadDeck = async (
+    cycle: DeckCycle = deckState.currentCycle,
+    shouldRefresh = false,
+    sessionOverride?: PlayerSession,
+  ) => {
+    const activeSession = sessionOverride ?? playerSession
+    if (!activeSession) {
       return
     }
 
-    const playerGuest = matchGuestByName(guests, playerNameRaw)
-    if (!playerGuest) {
-      setStatus({
-        message: 'We could not match your name. Try your full name as listed by the event host.',
-        variant: 'error',
-      })
-      return
+    try {
+      setLoading(true)
+      const cards = shouldRefresh
+        ? await refreshDeck(activeSession.playerGuestId, activeSession.sessionId)
+        : await getDeck(activeSession.playerGuestId, activeSession.sessionId)
+      setDeckCards(cards)
+      const persisted = setDeckCycle(cycle)
+      setDeckStateState(persisted)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load card deck.'
+      setStatus({ message, variant: 'error' })
+    } finally {
+      setLoading(false)
     }
-
-    if (guests.length <= 1) {
-      setStatus({
-        message: 'Not enough active guests to start the challenge.',
-        variant: 'error',
-      })
-      return
-    }
-
-    const sessionId = playerSession?.sessionId ?? createSessionId()
-    const nextSession: PlayerSession = {
-      sessionId,
-      playerName: playerGuest.name,
-      playerGuestId: playerGuest.id,
-    }
-
-    let nextAssignment = assignment
-    if (!nextAssignment || nextAssignment.sessionId !== sessionId) {
-      const targetGuest = pickTargetGuest(guests, playerGuest.id)
-      if (!targetGuest) {
-        setStatus({
-          message: 'Unable to assign a target right now. Please ask the host for help.',
-          variant: 'error',
-        })
-        return
-      }
-
-      nextAssignment = {
-        sessionId,
-        targetGuestId: targetGuest.id,
-        targetGuestName: targetGuest.name,
-      }
-      setAssignment(nextAssignment)
-      setAssignmentState(nextAssignment)
-    }
-
-    setPlayerSession(nextSession)
-    setPlayerSessionState(nextSession)
-    setStatus({
-      message: `Welcome, ${nextSession.playerName}. Your mission is ready.`,
-      variant: 'info',
-    })
   }
 
-  const handleAnswerSubmit = async (answerNameRaw: string) => {
-    if (!playerSession || !assignment || !assignedGuest) {
+  useEffect(() => {
+    if (!playerSession) {
       return
     }
 
-    const isCorrect = isNameMatch(answerNameRaw, assignedGuest.name)
+    const timer = window.setTimeout(() => {
+      void loadDeck(getDeckState().currentCycle)
+    }, 0)
 
-    setSubmitting(true)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const handleFindProfile = async () => {
     try {
-      await logAttempt({
-        playerName: playerSession.playerName,
-        assignedGuestId: assignment.targetGuestId,
-        assignedGuestName: assignment.targetGuestName,
-        answerName: answerNameRaw,
-        isCorrect,
-        sessionId: playerSession.sessionId,
-      })
-
-      if (!isCorrect) {
+      setLoading(true)
+      const result = await getProfile(nameInput)
+      if (!result) {
+        setProfile(null)
         setStatus({
-          message: 'Not quite. Keep talking and try one more guess.',
+          message: 'Profile not found. Try your full name from the guest list.',
           variant: 'error',
         })
         return
       }
 
-      if (!hasWinnerMark(playerSession.sessionId)) {
-        await logWinner({
-          playerName: playerSession.playerName,
-          assignedGuestName: assignment.targetGuestName,
-          sessionId: playerSession.sessionId,
-        })
-        setWinnerMark(playerSession.sessionId)
-      }
-
+      setProfile(result)
+      setFactInput(result.fact)
       setStatus({
-        message: 'Super, awesome! You are in the raffle pool.',
-        variant: 'success',
+        message: `Welcome ${result.name}. Confirm your fact to activate your profile.`,
+        variant: 'info',
       })
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Could not submit answer right now.'
+      const message = error instanceof Error ? error.message : 'Could not load profile.'
+      setStatus({ message, variant: 'error' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleActivate = async () => {
+    if (!profile) {
+      return
+    }
+
+    try {
+      setActivating(true)
+      const activatedProfile = await activateProfile({
+        guestId: profile.id,
+        fact: factInput,
+      })
+
+      const sessionId = playerSession?.sessionId ?? createSessionId()
+      const session: PlayerSession = {
+        sessionId,
+        playerName: activatedProfile.name,
+        playerGuestId: activatedProfile.id,
+      }
+      setPlayerSession(session)
+      resetDeckState()
+      setDeckStateState(getDeckState())
+      setPlayerSessionState(session)
+      setProfile(activatedProfile)
+      setStatus({
+        message: 'Profile activated. Start swiping guest cards.',
+        variant: 'success',
+      })
+      await loadDeck('initial', true, session)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not activate profile.'
+      setStatus({ message, variant: 'error' })
+    } finally {
+      setActivating(false)
+    }
+  }
+
+  const handleSubmitGuess = async () => {
+    if (!playerSession || !currentCard || !guessInput.trim()) {
+      return
+    }
+
+    try {
+      setSubmitting(true)
+      const response = await submitGuess({
+        sessionId: playerSession.sessionId,
+        playerGuestId: playerSession.playerGuestId,
+        targetGuestId: currentCard.id,
+        answerName: guessInput,
+        cycle: deckState.currentCycle,
+      })
+      const next = markAnswered(currentCard.id)
+      setDeckStateState(next)
+      setGuessInput('')
+      setStatus({
+        message:
+          response.result === 'correct'
+            ? 'Correct match. Nice work, hunter.'
+            : 'Logged. Keep exploring and try the next guest.',
+        variant: response.result === 'correct' ? 'success' : 'info',
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not submit guess.'
       setStatus({ message, variant: 'error' })
     } finally {
       setSubmitting(false)
     }
   }
 
+  const handleConfirmSkip = async () => {
+    if (!playerSession || !currentCard) {
+      return
+    }
+
+    try {
+      setSubmitting(true)
+      await skipCard({
+        sessionId: playerSession.sessionId,
+        playerGuestId: playerSession.playerGuestId,
+        targetGuestId: currentCard.id,
+        cycle: deckState.currentCycle,
+      })
+      const next = markSkipped(currentCard.id)
+      setDeckStateState(next)
+      setStatus({
+        message: 'Card skipped. You can replay skipped cards later.',
+        variant: 'info',
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not skip card.'
+      setStatus({ message, variant: 'error' })
+    } finally {
+      setShowSkipDialog(false)
+      setSubmitting(false)
+    }
+  }
+
+  const handleReplaySkipped = () => {
+    const next = setDeckCycle('replay-skipped')
+    setDeckStateState(next)
+    setStatus({
+      message: 'Replay mode enabled. Showing cards you skipped earlier.',
+      variant: 'info',
+    })
+  }
+
+  const handleRefreshDeck = async () => {
+    const next = setDeckCycle('initial')
+    setDeckStateState(next)
+    await loadDeck('initial', true)
+    setStatus({
+      message: 'Deck refreshed. New activated guests are now available.',
+      variant: 'info',
+    })
+  }
+
   return (
-    <main className="page">
-      <header className="hero">
-        <p className="eyebrow">QR Icebreaker Challenge</p>
-        <h1>Find your person</h1>
-        <p className="subtitle">
-          Meet someone new using one fun fact from the guest list.
-        </p>
-      </header>
+    <div className="page-shell">
+      <main className="page">
+        <header className="hero">
+          <p className="eyebrow">This You?</p>
+          <h1>Start conversations without overthinking</h1>
+          <p className="subtitle">
+            You will see random facts about people at this party. Some impressive. Some chaotic.
+            Some questionable. Your job is to figure out who is who by actually talking to people.
+          </p>
+          <div className="hero-meta">
+            <span className="hero-badge">
+              {loading ? 'Loading cards...' : `${activeCards.length} cards available`}
+            </span>
+            <span className="hero-badge">Cycle: {deckState.currentCycle}</span>
+            {playerSession ? (
+              <span className="hero-badge">Player: {playerSession.playerName}</span>
+            ) : null}
+          </div>
+        </header>
 
-      {status ? <StatusBanner variant={status.variant} message={status.message} /> : null}
+        {status ? <StatusBanner variant={status.variant} message={status.message} /> : null}
 
-      {!playerSession ? (
-        <NameEntryForm disabled={loading} onSubmit={handleNameSubmit} />
-      ) : null}
+        {!playerSession ? (
+          <ActivationCard
+            profile={profile}
+            nameInput={nameInput}
+            factInput={factInput}
+            loading={loading}
+            activating={activating}
+            onNameInputChange={setNameInput}
+            onFactInputChange={setFactInput}
+            onFindProfile={handleFindProfile}
+            onActivate={handleActivate}
+          />
+        ) : null}
 
-      {playerSession && assignedGuest ? (
-        <>
-          <ChallengeCard fact={assignedGuest.fact} />
-          <AnswerForm disabled={submitting} onSubmit={handleAnswerSubmit} />
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => {
+        {playerSession && currentCard ? (
+          <GuestFactCard
+            card={currentCard}
+            guessValue={guessInput}
+            submitting={submitting}
+            onGuessChange={setGuessInput}
+            onSubmitGuess={handleSubmitGuess}
+            onSkip={() => setShowSkipDialog(true)}
+          />
+        ) : null}
+
+        {playerSession && !currentCard ? (
+          <DeckEmptyState
+            canReplay={
+              deckState.skippedCardIds
+                .filter((id) => !deckState.answeredCardIds.includes(id)).length > 0
+            }
+            onReplaySkipped={handleReplaySkipped}
+            onRefresh={handleRefreshDeck}
+            onResetSession={() => {
               clearPlayerSession()
               setPlayerSessionState(null)
-              setAssignmentState(null)
-              setStatus({ message: 'Session reset. Enter your name again.', variant: 'info' })
+              setProfile(null)
+              setDeckCards([])
+              resetDeckState()
+              setDeckStateState(getDeckState())
+              setNameInput('')
+              setFactInput('')
+              setGuessInput('')
+              setStatus({
+                message: 'Session reset. Activate your profile to play again.',
+                variant: 'info',
+              })
             }}
-          >
-            Reset session
-          </button>
-        </>
-      ) : null}
-    </main>
+          />
+        ) : null}
+      </main>
+
+      <SkipConfirmDialog
+        open={showSkipDialog}
+        onCancel={() => setShowSkipDialog(false)}
+        onConfirm={handleConfirmSkip}
+      />
+    </div>
   )
 }
 

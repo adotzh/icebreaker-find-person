@@ -16,6 +16,10 @@ export function AnswerForm({ disabled, onSubmit }: AnswerFormProps) {
 
   return (
     <form className="card" onSubmit={handleSubmit}>
+      <div className="card-header">
+        <p className="section-kicker">Step 3</p>
+        <h2>Submit your answer</h2>
+      </div>
       <label className="field">
         <span>Who did you find?</span>
         <input
@@ -27,7 +31,7 @@ export function AnswerForm({ disabled, onSubmit }: AnswerFormProps) {
           disabled={disabled}
         />
       </label>
-      <button type="submit" disabled={disabled}>
+      <button type="submit" disabled={disabled} className="button-primary">
         Submit answer
       </button>
     </form>

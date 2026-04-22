@@ -1,9 +1,16 @@
 # Icebreaker Find Person
 
-A QR-powered party game that helps guests start real conversations fast.
+## This You?
 
-Guests scan a QR code, enter their name, get a fun fact about another guest, and try to find that person in the room.  
-If they guess correctly, they join the raffle pool.
+The easiest way to start a conversation without overthinking it.
+
+You will see a bunch of random facts about people at this party.
+Some impressive. Some chaotic. Some questionable.
+
+Your job is to figure out who is who by actually talking to people.
+
+Guests scan a QR code, activate their profile, and move through guest cards one by one.
+They submit guesses, skip cards, and keep exploring new people in the room.
 
 ## Why this is fun at events
 - Breaks awkward silence in the first minutes.

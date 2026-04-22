@@ -3,21 +3,39 @@ export type Guest = {
   name: string
   fact: string
   active: boolean
+  factConfirmed: boolean
+  activatedAt?: string
+  factUpdatedAt?: string
 }
 
-export type AttemptPayload = {
-  playerName: string
-  assignedGuestId: string
-  assignedGuestName: string
+export type DeckCard = {
+  id: string
+  fact: string
+}
+
+export type GuessPayload = {
+  sessionId: string
+  playerGuestId: string
+  targetGuestId: string
   answerName: string
-  isCorrect: boolean
-  sessionId: string
+  cycle: DeckCycle
 }
 
-export type WinnerPayload = {
-  playerName: string
-  assignedGuestName: string
+export type GuessResult = {
+  ok: boolean
+  result: 'correct' | 'incorrect'
+}
+
+export type SkipPayload = {
   sessionId: string
+  playerGuestId: string
+  targetGuestId: string
+  cycle: DeckCycle
+}
+
+export type ProfilePayload = {
+  guestId: string
+  fact: string
 }
 
 export type PlayerSession = {
@@ -26,8 +44,10 @@ export type PlayerSession = {
   playerGuestId: string
 }
 
-export type Assignment = {
-  sessionId: string
-  targetGuestId: string
-  targetGuestName: string
+export type DeckCycle = 'initial' | 'replay-skipped'
+
+export type DeckLocalState = {
+  answeredCardIds: string[]
+  skippedCardIds: string[]
+  currentCycle: DeckCycle
 }
