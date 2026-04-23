@@ -31,6 +31,10 @@ import {
 import type { DeckCard, DeckCycle, DeckLocalState, Guest, PlayerSession } from './types'
 
 type ThemeId = 'neon-night' | 'playful-editorial' | 'soft-3d'
+type StatusState = {
+  message: string
+  variant: 'info' | 'success' | 'error'
+}
 
 const THEME_STORAGE_KEY = 'icebreaker:ui-theme'
 
@@ -38,10 +42,7 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [activating, setActivating] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [status, setStatus] = useState<{
-    message: string
-    variant: 'info' | 'success' | 'error'
-  } | null>({
+  const [status, setStatus] = useState<StatusState | null>({
     message: 'Activate your profile to join the game and receive guest cards.',
     variant: 'info',
   })
@@ -86,14 +87,25 @@ function App() {
   const currentCard = activeCards[0] ?? null
   const nextCard = activeCards[1] ?? null
 
+  const clearFailedPopupTimer = () => {
+    if (failedPopupTimerRef.current) {
+      window.clearTimeout(failedPopupTimerRef.current)
+      failedPopupTimerRef.current = null
+    }
+  }
+
+  const clearFailedGuessState = () => {
+    clearFailedPopupTimer()
+    setShowFailedPopup(false)
+    setLastGuessResult(null)
+  }
+
   useEffect(() => {
     return () => {
       if (advanceTimerRef.current) {
         window.clearTimeout(advanceTimerRef.current)
       }
-      if (failedPopupTimerRef.current) {
-        window.clearTimeout(failedPopupTimerRef.current)
-      }
+      clearFailedPopupTimer()
       pendingSuccessCardIdRef.current = null
     }
   }, [])
@@ -272,12 +284,7 @@ function App() {
         cycle: deckState.currentCycle,
       })
       if (response.result === 'correct') {
-        setLastGuessResult(null)
-        if (failedPopupTimerRef.current) {
-          window.clearTimeout(failedPopupTimerRef.current)
-          failedPopupTimerRef.current = null
-        }
-        setShowFailedPopup(false)
+        clearFailedGuessState()
         setShowSuccessPopup(true)
         pendingSuccessCardIdRef.current = currentCard.id
         setStatus({
@@ -301,9 +308,7 @@ function App() {
           message: 'Not them. But now you know one more person.',
           variant: 'info',
         })
-        if (failedPopupTimerRef.current) {
-          window.clearTimeout(failedPopupTimerRef.current)
-        }
+        clearFailedPopupTimer()
         failedPopupTimerRef.current = window.setTimeout(() => {
           setShowFailedPopup(false)
           failedPopupTimerRef.current = null
@@ -332,12 +337,7 @@ function App() {
       })
       const next = markSkipped(currentCard.id)
       setDeckStateState(next)
-      setLastGuessResult(null)
-      if (failedPopupTimerRef.current) {
-        window.clearTimeout(failedPopupTimerRef.current)
-        failedPopupTimerRef.current = null
-      }
-      setShowFailedPopup(false)
+      clearFailedGuessState()
       setStatus({
         message: 'Skipped. You can revisit it in replay.',
         variant: 'info',
@@ -354,12 +354,7 @@ function App() {
   const handleReplaySkipped = () => {
     const next = setDeckCycle('replay-skipped')
     setDeckStateState(next)
-    setLastGuessResult(null)
-    if (failedPopupTimerRef.current) {
-      window.clearTimeout(failedPopupTimerRef.current)
-      failedPopupTimerRef.current = null
-    }
-    setShowFailedPopup(false)
+    clearFailedGuessState()
     setStatus({
       message: 'Replay mode enabled. Showing cards you skipped earlier.',
       variant: 'info',
@@ -369,12 +364,7 @@ function App() {
   const handleRefreshDeck = async () => {
     const next = setDeckCycle('initial')
     setDeckStateState(next)
-    setLastGuessResult(null)
-    if (failedPopupTimerRef.current) {
-      window.clearTimeout(failedPopupTimerRef.current)
-      failedPopupTimerRef.current = null
-    }
-    setShowFailedPopup(false)
+    clearFailedGuessState()
     await loadDeck('initial', true)
     setStatus({
       message: 'Deck refreshed. New activated guests are now available.',
@@ -393,16 +383,11 @@ function App() {
     setFactInput('')
     setProfileLookupAttempted(false)
     setGuessInput('')
-    setLastGuessResult(null)
     setShowSkipDialog(false)
     setShowSuccessPopup(false)
-    setShowFailedPopup(false)
+    clearFailedGuessState()
     pendingSuccessCardIdRef.current = null
     setShowAccountDialog(false)
-    if (failedPopupTimerRef.current) {
-      window.clearTimeout(failedPopupTimerRef.current)
-      failedPopupTimerRef.current = null
-    }
     setStatus({
       message: 'Profile reset completed.',
       variant: 'success',
@@ -510,10 +495,7 @@ function App() {
         title="Not them. But now you know one more person."
         subtitle="Take another guess or keep exploring."
         onClose={() => {
-          if (failedPopupTimerRef.current) {
-            window.clearTimeout(failedPopupTimerRef.current)
-            failedPopupTimerRef.current = null
-          }
+          clearFailedPopupTimer()
           setShowFailedPopup(false)
         }}
       />
