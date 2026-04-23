@@ -3,6 +3,7 @@ import type { Guest } from '../types'
 
 type ActivationCardProps = {
   profile: Guest | null
+  profileLookupAttempted: boolean
   nameInput: string
   factInput: string
   loading: boolean
@@ -15,6 +16,7 @@ type ActivationCardProps = {
 
 export function ActivationCard({
   profile,
+  profileLookupAttempted,
   nameInput,
   factInput,
   loading,
@@ -34,14 +36,21 @@ export function ActivationCard({
     onActivate()
   }
 
+  const canEditFact = profileLookupAttempted && !loading
+  const isCreateMode = profileLookupAttempted && !profile
+
   return (
     <section className="activation-screen card">
       <header className="card-header">
-        <p className="section-kicker">Step 1</p>
-        <h2>Activate your profile</h2>
+        <p className="section-kicker">😏 This You?</p>
+        <h2>Skip the small talk. Start with something interesting.</h2>
       </header>
       <p className="card-description">
-        Confirm your fact so others can discover you in the card deck.
+        You are about to get a random fact about someone here. Your mission is simple: find
+        them by talking to people.
+      </p>
+      <p className="card-description">
+        Yes, this is your official excuse to walk up to strangers.
       </p>
 
       <form onSubmit={handleFindSubmit} className="stack-form">
@@ -56,25 +65,34 @@ export function ActivationCard({
           />
         </label>
         <button type="submit" className="button-primary" disabled={loading || activating}>
-          Find my profile
+          {loading ? 'Finding...' : 'Find me'}
         </button>
       </form>
 
-      {profile ? (
+      {canEditFact ? (
         <form onSubmit={handleActivateSubmit} className="stack-form">
+          {isCreateMode ? (
+            <p className="card-description">
+              You are still a mystery... for now. Add a fact and let people come find you.
+            </p>
+          ) : null}
           <label className="field">
-            <span>Your fact</span>
+            <span>Your fun fact</span>
             <textarea
               value={factInput}
               onChange={(event) => onFactInputChange(event.target.value)}
-              placeholder="Share a fun fact about yourself"
+              placeholder="Share a fun fact people can use to find you"
               rows={4}
               required
               disabled={activating}
             />
           </label>
           <button type="submit" className="button-primary" disabled={activating}>
-            {activating ? 'Activating...' : 'Activate and start playing'}
+            {activating
+              ? 'Activating...'
+              : isCreateMode
+                ? 'Create profile and start'
+                : 'I am in, let us play'}
           </button>
         </form>
       ) : null}

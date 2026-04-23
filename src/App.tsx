@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   activateProfile,
   getDeck,
+  getProgress,
   getProfile,
   refreshDeck,
   selectCardsForCycle,
@@ -9,8 +10,10 @@ import {
   submitGuess,
 } from './api/client'
 import { ActivationCard } from './components/ActivationCard'
+import { AccountDialog } from './components/AccountDialog'
 import { DeckEmptyState } from './components/DeckEmptyState'
 import { GuestFactCard } from './components/GuestFactCard'
+import { ResultPopup } from './components/ResultPopup'
 import { SkipConfirmDialog } from './components/SkipConfirmDialog'
 import { StatusBanner } from './components/StatusBanner'
 import {
@@ -21,10 +24,15 @@ import {
   markAnswered,
   markSkipped,
   resetDeckState,
+  setDeckState,
   setDeckCycle,
   setPlayerSession,
 } from './lib/storage'
 import type { DeckCard, DeckCycle, DeckLocalState, Guest, PlayerSession } from './types'
+
+type ThemeId = 'neon-night' | 'playful-editorial' | 'soft-3d'
+
+const THEME_STORAGE_KEY = 'icebreaker:ui-theme'
 
 function App() {
   const [loading, setLoading] = useState(false)
@@ -37,12 +45,28 @@ function App() {
     message: 'Activate your profile to join the game and receive guest cards.',
     variant: 'info',
   })
+  const [registrationNotice, setRegistrationNotice] = useState<string | null>(null)
   const [nameInput, setNameInput] = useState('')
   const [factInput, setFactInput] = useState('')
   const [profile, setProfile] = useState<Guest | null>(null)
+  const [profileLookupAttempted, setProfileLookupAttempted] = useState(false)
   const [deckCards, setDeckCards] = useState<DeckCard[]>([])
   const [guessInput, setGuessInput] = useState('')
   const [showSkipDialog, setShowSkipDialog] = useState(false)
+  const [showAccountDialog, setShowAccountDialog] = useState(false)
+  const [lastGuessResult, setLastGuessResult] = useState<'success' | 'failed' | null>(null)
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false)
+  const [showFailedPopup, setShowFailedPopup] = useState(false)
+  const advanceTimerRef = useRef<number | null>(null)
+  const failedPopupTimerRef = useRef<number | null>(null)
+  const pendingSuccessCardIdRef = useRef<string | null>(null)
+  const [theme] = useState<ThemeId>(() => {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
+    if (stored === 'neon-night' || stored === 'playful-editorial' || stored === 'soft-3d') {
+      return stored
+    }
+    return 'soft-3d'
+  })
 
   const [playerSession, setPlayerSessionState] = useState<PlayerSession | null>(() =>
     getPlayerSession(),
@@ -60,6 +84,32 @@ function App() {
     [deckCards, deckState],
   )
   const currentCard = activeCards[0] ?? null
+  const nextCard = activeCards[1] ?? null
+
+  useEffect(() => {
+    return () => {
+      if (advanceTimerRef.current) {
+        window.clearTimeout(advanceTimerRef.current)
+      }
+      if (failedPopupTimerRef.current) {
+        window.clearTimeout(failedPopupTimerRef.current)
+      }
+      pendingSuccessCardIdRef.current = null
+    }
+  }, [])
+
+  const finalizeSuccessAdvance = () => {
+    const cardId = pendingSuccessCardIdRef.current
+    if (!cardId) {
+      setShowSuccessPopup(false)
+      return
+    }
+
+    const next = markAnswered(cardId)
+    setDeckStateState(next)
+    setShowSuccessPopup(false)
+    pendingSuccessCardIdRef.current = null
+  }
 
   const loadDeck = async (
     cycle: DeckCycle = deckState.currentCycle,
@@ -88,12 +138,41 @@ function App() {
   }
 
   useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme)
+  }, [theme])
+
+  const hydrateProgressFromBackend = async (session: PlayerSession): Promise<DeckLocalState> => {
+    const localState = getDeckState()
+    try {
+      const remoteState = await getProgress(session.playerGuestId)
+      const merged: DeckLocalState = {
+        answeredCardIds: Array.from(
+          new Set([...localState.answeredCardIds, ...remoteState.answeredCardIds]),
+        ),
+        skippedCardIds: Array.from(
+          new Set([...localState.skippedCardIds, ...remoteState.skippedCardIds]),
+        ).filter((id) => !localState.answeredCardIds.includes(id) && !remoteState.answeredCardIds.includes(id)),
+        currentCycle: localState.currentCycle === 'replay-skipped' ? 'replay-skipped' : remoteState.currentCycle,
+      }
+      setDeckState(merged)
+      setDeckStateState(merged)
+      return merged
+    } catch {
+      return localState
+    }
+  }
+
+  useEffect(() => {
     if (!playerSession) {
       return
     }
 
     const timer = window.setTimeout(() => {
-      void loadDeck(getDeckState().currentCycle)
+      void (async () => {
+        const mergedState = await hydrateProgressFromBackend(playerSession)
+        await loadDeck(mergedState.currentCycle, false, playerSession)
+      })()
     }, 0)
 
     return () => window.clearTimeout(timer)
@@ -101,22 +180,28 @@ function App() {
   }, [])
 
   const handleFindProfile = async () => {
+    setRegistrationNotice(null)
+    setProfileLookupAttempted(false)
+    setProfile(null)
+    setFactInput('')
     try {
       setLoading(true)
       const result = await getProfile(nameInput)
       if (!result) {
-        setProfile(null)
+        setProfileLookupAttempted(true)
         setStatus({
-          message: 'Profile not found. Try your full name from the guest list.',
-          variant: 'error',
+          message:
+            'Profile not found. Add a fact below and we will create your profile.',
+          variant: 'info',
         })
         return
       }
 
       setProfile(result)
       setFactInput(result.fact)
+      setProfileLookupAttempted(true)
       setStatus({
-        message: `Welcome ${result.name}. Confirm your fact to activate your profile.`,
+        message: `Hey ${result.name}. Confirm your fact and join the hunt.`,
         variant: 'info',
       })
     } catch (error) {
@@ -128,15 +213,23 @@ function App() {
   }
 
   const handleActivate = async () => {
-    if (!profile) {
+    const trimmedName = nameInput.trim()
+    const trimmedFact = factInput.trim()
+    if (!trimmedName || !trimmedFact) {
+      setStatus({
+        message: 'Please provide your name and a fact before activating.',
+        variant: 'error',
+      })
       return
     }
 
     try {
+      setRegistrationNotice(null)
       setActivating(true)
       const activatedProfile = await activateProfile({
-        guestId: profile.id,
-        fact: factInput,
+        guestId: profile?.id,
+        name: trimmedName,
+        fact: trimmedFact,
       })
 
       const sessionId = playerSession?.sessionId ?? createSessionId()
@@ -150,8 +243,9 @@ function App() {
       setDeckStateState(getDeckState())
       setPlayerSessionState(session)
       setProfile(activatedProfile)
+      setProfileLookupAttempted(true)
       setStatus({
-        message: 'Profile activated. Start swiping guest cards.',
+        message: 'Profile activated. Start your first card.',
         variant: 'success',
       })
       await loadDeck('initial', true, session)
@@ -177,16 +271,44 @@ function App() {
         answerName: guessInput,
         cycle: deckState.currentCycle,
       })
-      const next = markAnswered(currentCard.id)
-      setDeckStateState(next)
-      setGuessInput('')
-      setStatus({
-        message:
-          response.result === 'correct'
-            ? 'Correct match. Nice work, hunter.'
-            : 'Logged. Keep exploring and try the next guest.',
-        variant: response.result === 'correct' ? 'success' : 'info',
-      })
+      if (response.result === 'correct') {
+        setLastGuessResult(null)
+        if (failedPopupTimerRef.current) {
+          window.clearTimeout(failedPopupTimerRef.current)
+          failedPopupTimerRef.current = null
+        }
+        setShowFailedPopup(false)
+        setShowSuccessPopup(true)
+        pendingSuccessCardIdRef.current = currentCard.id
+        setStatus({
+          message: 'Nice catch.',
+          variant: 'success',
+        })
+        setGuessInput('')
+
+        if (advanceTimerRef.current) {
+          window.clearTimeout(advanceTimerRef.current)
+        }
+        advanceTimerRef.current = window.setTimeout(() => {
+          finalizeSuccessAdvance()
+          advanceTimerRef.current = null
+        }, 5000)
+      } else {
+        setLastGuessResult('failed')
+        setShowSuccessPopup(false)
+        setShowFailedPopup(true)
+        setStatus({
+          message: 'Not this one.',
+          variant: 'info',
+        })
+        if (failedPopupTimerRef.current) {
+          window.clearTimeout(failedPopupTimerRef.current)
+        }
+        failedPopupTimerRef.current = window.setTimeout(() => {
+          setShowFailedPopup(false)
+          failedPopupTimerRef.current = null
+        }, 5000)
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not submit guess.'
       setStatus({ message, variant: 'error' })
@@ -210,8 +332,14 @@ function App() {
       })
       const next = markSkipped(currentCard.id)
       setDeckStateState(next)
+      setLastGuessResult(null)
+      if (failedPopupTimerRef.current) {
+        window.clearTimeout(failedPopupTimerRef.current)
+        failedPopupTimerRef.current = null
+      }
+      setShowFailedPopup(false)
       setStatus({
-        message: 'Card skipped. You can replay skipped cards later.',
+        message: 'Skipped. You can revisit it in replay.',
         variant: 'info',
       })
     } catch (error) {
@@ -226,6 +354,12 @@ function App() {
   const handleReplaySkipped = () => {
     const next = setDeckCycle('replay-skipped')
     setDeckStateState(next)
+    setLastGuessResult(null)
+    if (failedPopupTimerRef.current) {
+      window.clearTimeout(failedPopupTimerRef.current)
+      failedPopupTimerRef.current = null
+    }
+    setShowFailedPopup(false)
     setStatus({
       message: 'Replay mode enabled. Showing cards you skipped earlier.',
       variant: 'info',
@@ -235,6 +369,12 @@ function App() {
   const handleRefreshDeck = async () => {
     const next = setDeckCycle('initial')
     setDeckStateState(next)
+    setLastGuessResult(null)
+    if (failedPopupTimerRef.current) {
+      window.clearTimeout(failedPopupTimerRef.current)
+      failedPopupTimerRef.current = null
+    }
+    setShowFailedPopup(false)
     await loadDeck('initial', true)
     setStatus({
       message: 'Deck refreshed. New activated guests are now available.',
@@ -242,32 +382,46 @@ function App() {
     })
   }
 
+  const restartSession = () => {
+    clearPlayerSession()
+    setPlayerSessionState(null)
+    setProfile(null)
+    setDeckCards([])
+    resetDeckState()
+    setDeckStateState(getDeckState())
+    setNameInput('')
+    setFactInput('')
+    setProfileLookupAttempted(false)
+    setGuessInput('')
+    setLastGuessResult(null)
+    setShowSkipDialog(false)
+    setShowSuccessPopup(false)
+    setShowFailedPopup(false)
+    pendingSuccessCardIdRef.current = null
+    setShowAccountDialog(false)
+    if (failedPopupTimerRef.current) {
+      window.clearTimeout(failedPopupTimerRef.current)
+      failedPopupTimerRef.current = null
+    }
+    setStatus({
+      message: 'Profile reset completed.',
+      variant: 'success',
+    })
+    setRegistrationNotice('Session restarted. Enter your name to start again.')
+  }
+
   return (
     <div className="page-shell">
-      <main className="page">
-        <header className="hero">
-          <p className="eyebrow">This You?</p>
-          <h1>Start conversations without overthinking</h1>
-          <p className="subtitle">
-            You will see random facts about people at this party. Some impressive. Some chaotic.
-            Some questionable. Your job is to figure out who is who by actually talking to people.
-          </p>
-          <div className="hero-meta">
-            <span className="hero-badge">
-              {loading ? 'Loading cards...' : `${activeCards.length} cards available`}
-            </span>
-            <span className="hero-badge">Cycle: {deckState.currentCycle}</span>
-            {playerSession ? (
-              <span className="hero-badge">Player: {playerSession.playerName}</span>
-            ) : null}
-          </div>
-        </header>
+      {!playerSession ? (
+        <main className="page registration-page">
+          {registrationNotice ? <p className="registration-notice">{registrationNotice}</p> : null}
+          {status && status.variant === 'error' ? (
+            <StatusBanner variant={status.variant} message={status.message} />
+          ) : null}
 
-        {status ? <StatusBanner variant={status.variant} message={status.message} /> : null}
-
-        {!playerSession ? (
           <ActivationCard
             profile={profile}
+            profileLookupAttempted={profileLookupAttempted}
             nameInput={nameInput}
             factInput={factInput}
             loading={loading}
@@ -277,20 +431,48 @@ function App() {
             onFindProfile={handleFindProfile}
             onActivate={handleActivate}
           />
-        ) : null}
+        </main>
+      ) : (
+        <main className="page game-page">
+          <button
+            type="button"
+            className="account-fab"
+            onClick={() => setShowAccountDialog(true)}
+            aria-label="Open account page"
+          >
+            Account
+          </button>
 
-        {playerSession && currentCard ? (
+          {loading ? (
+            <section className="card deck-empty" aria-live="polite">
+              <header className="card-header">
+                <h2>Preparing your cards...</h2>
+              </header>
+              <p className="card-description">Loading the next fact challenge.</p>
+            </section>
+          ) : null}
+
+          {!loading && currentCard ? (
           <GuestFactCard
             card={currentCard}
+            nextCard={nextCard}
+            cardsLeft={activeCards.length}
+            solvedCount={deckState.answeredCardIds.length}
             guessValue={guessInput}
+            hasGuessError={lastGuessResult === 'failed'}
             submitting={submitting}
-            onGuessChange={setGuessInput}
+            onGuessChange={(value) => {
+              setGuessInput(value)
+              if (lastGuessResult === 'failed') {
+                setLastGuessResult(null)
+              }
+            }}
             onSubmitGuess={handleSubmitGuess}
             onSkip={() => setShowSkipDialog(true)}
           />
-        ) : null}
+          ) : null}
 
-        {playerSession && !currentCard ? (
+          {!loading && !currentCard ? (
           <DeckEmptyState
             canReplay={
               deckState.skippedCardIds
@@ -298,30 +480,54 @@ function App() {
             }
             onReplaySkipped={handleReplaySkipped}
             onRefresh={handleRefreshDeck}
-            onResetSession={() => {
-              clearPlayerSession()
-              setPlayerSessionState(null)
-              setProfile(null)
-              setDeckCards([])
-              resetDeckState()
-              setDeckStateState(getDeckState())
-              setNameInput('')
-              setFactInput('')
-              setGuessInput('')
-              setStatus({
-                message: 'Session reset. Activate your profile to play again.',
-                variant: 'info',
-              })
-            }}
+            onResetSession={restartSession}
           />
-        ) : null}
-      </main>
+          ) : null}
+        </main>
+      )}
 
       <SkipConfirmDialog
         open={showSkipDialog}
         onCancel={() => setShowSkipDialog(false)}
         onConfirm={handleConfirmSkip}
       />
+      <ResultPopup
+        open={showSuccessPopup}
+        variant="success"
+        title="Nice catch"
+        subtitle="Loading the next card..."
+        onClose={() => {
+          if (advanceTimerRef.current) {
+            window.clearTimeout(advanceTimerRef.current)
+            advanceTimerRef.current = null
+          }
+          finalizeSuccessAdvance()
+        }}
+      />
+      <ResultPopup
+        open={showFailedPopup}
+        variant="failed"
+        title="Not this one"
+        subtitle="Try another guess or skip."
+        onClose={() => {
+          if (failedPopupTimerRef.current) {
+            window.clearTimeout(failedPopupTimerRef.current)
+            failedPopupTimerRef.current = null
+          }
+          setShowFailedPopup(false)
+        }}
+      />
+      {playerSession ? (
+        <AccountDialog
+          open={showAccountDialog}
+          playerName={playerSession.playerName}
+          cycle={deckState.currentCycle}
+          solvedCount={deckState.answeredCardIds.length}
+          cardsAvailable={activeCards.length}
+          onClose={() => setShowAccountDialog(false)}
+          onRestartSession={restartSession}
+        />
+      ) : null}
     </div>
   )
 }

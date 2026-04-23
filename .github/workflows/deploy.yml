@@ -1,3 +1,9 @@
+# Publishes the Vite production build via GitHub’s “GitHub Actions” Pages source.
+#
+# Repo Settings → Pages → Build and deployment → Source must be “GitHub Actions”.
+# If Source is “Deploy from a branch” (default branch root), the site serves the
+# dev index.html and the app will not load.
+
 name: Deploy to GitHub Pages
 
 on:

@@ -12,14 +12,14 @@ export function SkipConfirmDialog({ open, onCancel, onConfirm }: SkipConfirmDial
   return (
     <div className="dialog-backdrop" role="presentation">
       <div className="dialog card" role="dialog" aria-modal="true" aria-label="Confirm skip">
-        <h3>Skip this card?</h3>
-        <p>You can replay skipped cards later.</p>
+        <h3>Skip this one?</h3>
+        <p>We will keep it for your replay round.</p>
         <div className="action-bar">
           <button type="button" className="button-secondary" onClick={onCancel}>
-            Keep card
+            Keep this card
           </button>
           <button type="button" className="button-primary" onClick={onConfirm}>
-            Confirm skip
+            Yes, skip
           </button>
         </div>
       </div>

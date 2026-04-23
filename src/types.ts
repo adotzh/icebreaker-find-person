@@ -34,7 +34,8 @@ export type SkipPayload = {
 }
 
 export type ProfilePayload = {
-  guestId: string
+  guestId?: string
+  name: string
   fact: string
 }
 

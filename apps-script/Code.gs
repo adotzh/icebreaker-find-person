@@ -27,6 +27,14 @@ function doGet(e) {
     );
   }
 
+  if (endpoint === 'get_progress') {
+    const playerGuestId = String((e && e.parameter && e.parameter.playerGuestId) || '');
+    const progress = getProgress_(playerGuestId);
+    return ContentService.createTextOutput(JSON.stringify(progress)).setMimeType(
+      ContentService.MimeType.JSON
+    );
+  }
+
   const html = `
     <!DOCTYPE html>
     <html>
@@ -125,7 +133,26 @@ function getProfileByName_(rawName) {
     return exact;
   }
 
-  return guests.find((guest) => normalizeName_(guest.name).indexOf(normalizedInput) !== -1) || null;
+  const contains = guests.find((guest) => normalizeName_(guest.name).indexOf(normalizedInput) !== -1);
+  if (contains) {
+    return contains;
+  }
+
+  // Typo-tolerant fallback for near matches (e.g. Ana vs Anna).
+  var bestGuest = null;
+  var bestScore = 0;
+
+  for (var i = 0; i < guests.length; i++) {
+    var candidate = guests[i];
+    var candidateName = normalizeName_(candidate.name);
+    var score = similarityScore_(normalizedInput, candidateName);
+    if (score > bestScore) {
+      bestScore = score;
+      bestGuest = candidate;
+    }
+  }
+
+  return bestScore >= 0.78 ? bestGuest : null;
 }
 
 function getDeck_(playerGuestId) {
@@ -144,9 +171,10 @@ function getDeck_(playerGuestId) {
 
 function activateProfile_(payload) {
   const guestId = String((payload && payload.guestId) || '');
+  const name = String((payload && payload.name) || '').trim();
   const fact = String((payload && payload.fact) || '').trim();
-  if (!guestId || !fact) {
-    throw new Error('guestId and fact are required.');
+  if (!name || !fact) {
+    throw new Error('name and fact are required.');
   }
 
   const guestsSheet = getSheet_(SHEET_GUESTS);
@@ -165,21 +193,64 @@ function activateProfile_(payload) {
   if (idIndex === -1 || factIndex === -1) {
     throw new Error('Guests sheet must include id and fact columns.');
   }
+  const nameIndex = headers.indexOf('name');
+  const activeIndex = ensureColumn_(guestsSheet, headers, 'active');
 
   const now = new Date().toISOString();
-  for (var rowIndex = 1; rowIndex < values.length; rowIndex++) {
-    if (String(values[rowIndex][idIndex] || '') !== guestId) {
-      continue;
-    }
+  var updated = false;
 
-    guestsSheet.getRange(rowIndex + 1, factIndex + 1).setValue(fact);
-    guestsSheet.getRange(rowIndex + 1, confirmedIndex + 1).setValue(true);
-    guestsSheet.getRange(rowIndex + 1, activatedAtIndex + 1).setValue(now);
-    guestsSheet.getRange(rowIndex + 1, factUpdatedAtIndex + 1).setValue(now);
-    break;
+  if (guestId) {
+    for (var rowIndex = 1; rowIndex < values.length; rowIndex++) {
+      if (String(values[rowIndex][idIndex] || '') !== guestId) {
+        continue;
+      }
+
+      if (nameIndex !== -1) {
+        guestsSheet.getRange(rowIndex + 1, nameIndex + 1).setValue(name);
+      }
+      guestsSheet.getRange(rowIndex + 1, factIndex + 1).setValue(fact);
+      guestsSheet.getRange(rowIndex + 1, activeIndex + 1).setValue(true);
+      guestsSheet.getRange(rowIndex + 1, confirmedIndex + 1).setValue(true);
+      guestsSheet.getRange(rowIndex + 1, activatedAtIndex + 1).setValue(now);
+      guestsSheet.getRange(rowIndex + 1, factUpdatedAtIndex + 1).setValue(now);
+      updated = true;
+      break;
+    }
   }
 
-  return getGuests().find((guest) => String(guest.id) === guestId) || null;
+  if (!updated) {
+    const newGuestId = createGuestId_(values, idIndex);
+    const row = [];
+    for (var col = 0; col < headers.length; col++) {
+      const header = headers[col];
+      if (header === 'id') {
+        row[col] = newGuestId;
+      } else if (header === 'name') {
+        row[col] = name;
+      } else if (header === 'fact') {
+        row[col] = fact;
+      } else if (header === 'active') {
+        row[col] = true;
+      } else if (header === 'factConfirmed') {
+        row[col] = true;
+      } else if (header === 'activatedAt') {
+        row[col] = now;
+      } else if (header === 'factUpdatedAt') {
+        row[col] = now;
+      } else {
+        row[col] = '';
+      }
+    }
+    guestsSheet.appendRow(row);
+  }
+
+  const normalizedName = normalizeName_(name);
+  return (
+    getGuests().find(
+      (guest) =>
+        (guestId && String(guest.id) === guestId) || normalizeName_(guest.name) === normalizedName
+    ) || null
+  );
 }
 
 function submitGuess_(payload) {
@@ -247,6 +318,47 @@ function appendSkip_(body) {
   ]);
 }
 
+function getProgress_(playerGuestId) {
+  if (!playerGuestId) {
+    return { answeredCardIds: [], skippedCardIds: [], currentCycle: 'initial' };
+  }
+
+  const answersRows = getOptionalSheetObjects_(SHEET_ANSWERS);
+  const skipsRows = getOptionalSheetObjects_(SHEET_SKIPS);
+
+  const answeredCardIds = unique_(
+    answersRows
+      .filter(
+        (row) =>
+          String(row.playerGuestId || '') === playerGuestId &&
+          String(row.result || '').toLowerCase() === 'correct'
+      )
+      .map((row) => String(row.targetGuestId || ''))
+      .filter(Boolean)
+  );
+
+  const skippedAll = unique_(
+    skipsRows
+      .filter((row) => String(row.playerGuestId || '') === playerGuestId)
+      .map((row) => String(row.targetGuestId || ''))
+      .filter(Boolean)
+  );
+  const skippedCardIds = skippedAll.filter((id) => answeredCardIds.indexOf(id) === -1);
+
+  const latestSkipCycle = getLatestCycle_(skipsRows, playerGuestId);
+  const latestAnswerCycle = getLatestCycle_(answersRows, playerGuestId);
+  const currentCycle =
+    latestSkipCycle === 'replay-skipped' || latestAnswerCycle === 'replay-skipped'
+      ? 'replay-skipped'
+      : 'initial';
+
+  return {
+    answeredCardIds: answeredCardIds,
+    skippedCardIds: skippedCardIds,
+    currentCycle: currentCycle,
+  };
+}
+
 function getSheet_(name) {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = spreadsheet.getSheetByName(name);
@@ -270,6 +382,15 @@ function ensureSheet_(name, headers) {
   }
 
   return sheet;
+}
+
+function getOptionalSheetObjects_(name) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName(name);
+  if (!sheet || sheet.getLastRow() < 2) {
+    return [];
+  }
+  return sheetToObjects_(sheet);
 }
 
 function ensureColumn_(sheet, headers, headerName) {
@@ -301,12 +422,108 @@ function sheetToObjects_(sheet) {
   });
 }
 
+function unique_(values) {
+  const map = {};
+  const result = [];
+  for (var i = 0; i < values.length; i++) {
+    const value = values[i];
+    if (map[value]) {
+      continue;
+    }
+    map[value] = true;
+    result.push(value);
+  }
+  return result;
+}
+
+function getLatestCycle_(rows, playerGuestId) {
+  var latestTimestamp = '';
+  var latestCycle = 'initial';
+
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    if (String(row.playerGuestId || '') !== playerGuestId) {
+      continue;
+    }
+    var timestamp = String(row.timestamp || '');
+    if (timestamp >= latestTimestamp) {
+      latestTimestamp = timestamp;
+      latestCycle = String(row.cycle || 'initial');
+    }
+  }
+
+  return latestCycle === 'replay-skipped' ? 'replay-skipped' : 'initial';
+}
+
 function normalizeName_(value) {
   return String(value || '')
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9а-яё\s-]/gi, '')
     .replace(/\s+/g, ' ');
+}
+
+function createGuestId_(values, idIndex) {
+  if (idIndex === -1) {
+    return String(Date.now());
+  }
+
+  var maxId = 0;
+  for (var rowIndex = 1; rowIndex < values.length; rowIndex++) {
+    var candidate = parseInt(String(values[rowIndex][idIndex] || ''), 10);
+    if (!isNaN(candidate) && candidate > maxId) {
+      maxId = candidate;
+    }
+  }
+  if (maxId > 0) {
+    return String(maxId + 1);
+  }
+  return String(Date.now());
+}
+
+function similarityScore_(left, right) {
+  if (!left || !right) {
+    return 0;
+  }
+
+  if (left === right) {
+    return 1;
+  }
+
+  var distance = levenshteinDistance_(left, right);
+  var maxLen = Math.max(left.length, right.length);
+  if (maxLen === 0) {
+    return 1;
+  }
+
+  return 1 - distance / maxLen;
+}
+
+function levenshteinDistance_(left, right) {
+  var rows = left.length + 1;
+  var cols = right.length + 1;
+  var matrix = [];
+
+  for (var i = 0; i < rows; i++) {
+    matrix[i] = [];
+    matrix[i][0] = i;
+  }
+  for (var j = 0; j < cols; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (var row = 1; row < rows; row++) {
+    for (var col = 1; col < cols; col++) {
+      var cost = left.charAt(row - 1) === right.charAt(col - 1) ? 0 : 1;
+      matrix[row][col] = Math.min(
+        matrix[row - 1][col] + 1,
+        matrix[row][col - 1] + 1,
+        matrix[row - 1][col - 1] + cost
+      );
+    }
+  }
+
+  return matrix[rows - 1][cols - 1];
 }
 
 function parseJsonBody_(e) {

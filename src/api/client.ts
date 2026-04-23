@@ -1,6 +1,7 @@
 import type {
   DeckCard,
   DeckCycle,
+  DeckLocalState,
   Guest,
   GuessPayload,
   GuessResult,
@@ -21,6 +22,12 @@ type DeckResponse = {
 
 type ProfileResponse = {
   guest: Guest | null
+}
+
+type ProgressResponse = {
+  answeredCardIds: string[]
+  skippedCardIds: string[]
+  currentCycle: DeckCycle
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -81,6 +88,18 @@ export async function refreshDeck(playerGuestId: string, sessionId: string): Pro
     { method: 'GET' },
   )
   return payload.cards
+}
+
+export async function getProgress(playerGuestId: string): Promise<DeckLocalState> {
+  const payload = await request<ProgressResponse>(
+    `?endpoint=get_progress&playerGuestId=${encodeURIComponent(playerGuestId)}`,
+    { method: 'GET' },
+  )
+  return {
+    answeredCardIds: payload.answeredCardIds ?? [],
+    skippedCardIds: payload.skippedCardIds ?? [],
+    currentCycle: payload.currentCycle ?? 'initial',
+  }
 }
 
 export async function submitGuess(payload: GuessPayload): Promise<GuessResult> {

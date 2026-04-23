@@ -14,15 +14,15 @@ export function DeckEmptyState({
   return (
     <section className="card deck-empty">
       <header className="card-header">
-        <p className="section-kicker">Deck status</p>
-        <h2>No cards for now</h2>
+        <p className="section-kicker">Round complete</p>
+        <h2>You cleared this deck</h2>
       </header>
       <p className="card-description">
-        You can refresh to pull newly activated guests, or replay skipped cards.
+        No new cards right now. Check for new guests or replay what you skipped.
       </p>
       <div className="stack-form">
         <button type="button" className="button-primary" onClick={onRefresh}>
-          Refresh deck
+          Check for new guests
         </button>
         <button
           type="button"
@@ -33,7 +33,7 @@ export function DeckEmptyState({
           Replay skipped cards
         </button>
         <button type="button" className="button-secondary" onClick={onResetSession}>
-          Reset player session
+          Restart profile
         </button>
       </div>
     </section>
