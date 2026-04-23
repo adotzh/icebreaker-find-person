@@ -2,105 +2,46 @@
 
 ## This You?
 
-The easiest way to start a conversation without overthinking it.
+Skip the small talk. Start with something interesting.
 
-You will see a bunch of random facts about people at this party.
-Some impressive. Some chaotic. Some questionable.
+This is a party icebreaker game: guests scan one QR code, get a mystery fact, and try to find the person behind it by talking to people in the room.
 
-Your job is to figure out who is who by actually talking to people.
+Perfect for birthdays, team events, networking nights, and community meetups.
 
-Guests scan a QR code, activate their profile, and move through guest cards one by one.
-They submit guesses, skip cards, and keep exploring new people in the room.
-
-## Why this is fun at events
-- Breaks awkward silence in the first minutes.
-- Gives every guest an easy reason to approach someone new.
-- Works for birthdays, team offsites, community meetups, and networking nights.
-- Creates instant engagement and energy without a host doing manual matchmaking.
-
-## How guests experience it
+## How it feels for guests
 1. Scan QR code.
-2. Enter their own name.
-3. Receive one mystery fact.
-4. Find the person behind the fact.
-5. Submit answer and celebrate if correct.
+2. Enter your name.
+3. Confirm or add your own fun fact.
+4. Get a mystery fact card.
+5. Guess who it is.
+6. If correct, move to the next card.
 
-## How hosts use it
-1. Prepare guest list in Google Sheets.
-2. Add one fun fact per guest.
-3. Deploy Apps Script web app.
-4. Print one QR code that links to the app URL.
-5. Run raffle from the `winners` sheet.
+It is designed to make first conversations easier and more natural.
 
-## Data setup (Google Sheets)
-Create one spreadsheet with 3 tabs:
+## How it works for hosts
+1. Prepare your guest list with one fun fact per person.
+2. Share one QR code at the event.
+3. Let guests play and meet each other.
+4. Use results for your raffle or prize draw.
 
-### `guests`
-Headers:
+That is it. No manual matchmaking needed during the event.
+
+## Google Sheet setup (simple)
+Yes — to start, you only need one tab: `guests`.
+
+Use these columns:
 - `id`
 - `name`
 - `fact`
 - `active`
 
-Example:
-- `1 | Alex Morgan | Speaks 4 languages | true`
+Example row:
+- `1 | Anna Petrova | I can solve a Rubik's cube in under a minute | true`
 
-### `attempts`
-Headers:
-- `timestamp`
-- `playerName`
-- `assignedGuestId`
-- `assignedGuestName`
-- `answerName`
-- `isCorrect`
-- `sessionId`
+Tip: keep `active` as `true` for people who should appear in the game.
 
-### `winners`
-Headers:
-- `timestamp`
-- `playerName`
-- `assignedGuestName`
-- `sessionId`
-
-## Deploy with Apps Script (single-file mode)
-This repo includes `apps-script/Code.gs` ready for deployment without `index.html`.
-
-1. Open your Google Sheet.
-2. Go to **Extensions -> Apps Script**.
-3. Replace code in `Code.gs` with `apps-script/Code.gs` from this repo.
-4. Save.
-5. Deploy as **Web app**:
-   - Execute as: **Me**
-   - Who has access: **Anyone**
-6. Copy `/exec` URL and use it as your QR destination.
-
-### Endpoint check
-To verify public guest JSON:
-- `YOUR_EXEC_URL?endpoint=guests`
-
-## Frontend local development
-1. Install dependencies:
-   - `npm install`
-2. Create `.env` from `.env.example`:
-   - `VITE_API_BASE_URL="YOUR_EXEC_URL"`
-3. Run:
-   - `npm run dev`
-
-## GitHub Pages deployment
-This repository includes `.github/workflows/deploy.yml`:
-- builds on push to `main`
-- uploads `dist`
-- deploys to GitHub Pages
-
-Set repository secret:
-- `VITE_API_BASE_URL` = your Apps Script `/exec` URL
-
-## Technical notes
-- Name matching is case-insensitive and supports Cyrillic + Latin input.
-- A player is never assigned to themself.
-- Session and assignment are persisted in `localStorage`.
-- Winner writes are deduplicated by `playerName + sessionId`.
-
-## Build
-- `npm run build`
-- `npm run preview`
+## What makes this game great
+- Gives every guest an easy opening line.
+- Turns awkward first minutes into a fun challenge.
+- Keeps people moving and talking.
+- Works with one simple QR code for everyone.
