@@ -113,48 +113,49 @@
 }
 
 :root[data-theme='soft-3d'] {
-  --bg-base: #dde7ff;
-  --bg-layer: radial-gradient(circle at 10% -10%, #f3f7ff 0%, transparent 44%),
-    radial-gradient(circle at 110% -2%, #d4f0ff 0%, transparent 35%), #dde7ff;
-  --surface: #f6f9ff;
-  --surface-border: #bfd0f7;
-  --text-primary: #1f2f4d;
-  --text-muted: #4c618d;
-  --text-soft: #6f82aa;
-  --accent: #5c7cfa;
-  --accent-strong: #2cb5ff;
-  --accent-soft: #e0e9ff;
-  --success-bg: #dff5ef;
-  --success-text: #205a4a;
-  --error-bg: #ffe5eb;
-  --error-text: #88335f;
-  --info-bg: #e3ecff;
-  --info-text: #2f4f92;
-  --shadow-card: 0 18px 34px rgba(75, 102, 170, 0.18);
-  --shadow-hero: 0 26px 48px rgba(75, 102, 170, 0.2);
-  --shadow-soft: 0 10px 24px rgba(55, 83, 145, 0.15);
-  --hero-bg: linear-gradient(160deg, #f5f9ff 0%, #dde7ff 100%);
-  --hero-glow: radial-gradient(circle, rgba(44, 181, 255, 0.32) 0%, transparent 65%);
-  --heading-color: #1f2f4d;
-  --badge-bg: rgba(242, 247, 255, 0.95);
-  --badge-border: rgba(44, 181, 255, 0.36);
-  --badge-text: #2f589b;
-  --field-border: #a9bee9;
-  --field-bg: #f8fbff;
-  --field-text: #293e66;
-  --field-placeholder: #7e93be;
-  --button-start: #5c7cfa;
-  --button-end: #2cb5ff;
-  --button-shadow: 0 10px 24px rgba(68, 116, 232, 0.32);
-  --button-shadow-hover: 0 14px 28px rgba(68, 116, 232, 0.42);
-  --button-focus: rgba(92, 124, 250, 0.32);
-  --button-secondary-border: rgba(76, 97, 141, 0.34);
-  --button-secondary-bg-hover: rgba(232, 240, 255, 0.92);
-  --button-secondary-text: #3b527f;
-  --fact-bg: rgba(237, 244, 255, 0.98);
-  --fact-border: rgba(92, 124, 250, 0.3);
-  --fact-text: #243a64;
-  --dialog-backdrop: rgba(28, 54, 102, 0.42);
+  --bg-base: #ebe3da;
+  --bg-layer:
+    linear-gradient(160deg, rgba(247, 241, 234, 0.48) 0%, rgba(231, 223, 212, 0.42) 100%),
+    url("https://cdn.sanity.io/images/cxgd3urn/production/97cf8bd15f224d11d0149bfb543f9e588608e83f-1807x1275.jpg?rect=1,0,1806,1275&w=1200&h=847&q=85&fit=crop&auto=format");
+  --surface: rgba(251, 246, 239, 0.9);
+  --surface-border: #d8c8b8;
+  --text-primary: #39342f;
+  --text-muted: #5c554f;
+  --text-soft: #7e756b;
+  --accent: #7a94a5;
+  --accent-strong: #5b7f97;
+  --accent-soft: #ece3d8;
+  --success-bg: #e2efe6;
+  --success-text: #2d5b47;
+  --error-bg: #f6dfdc;
+  --error-text: #7c3e46;
+  --info-bg: #e8ecee;
+  --info-text: #425766;
+  --shadow-card: 0 16px 34px rgba(70, 56, 42, 0.18);
+  --shadow-hero: 0 24px 46px rgba(70, 56, 42, 0.22);
+  --shadow-soft: 0 10px 24px rgba(70, 56, 42, 0.15);
+  --hero-bg: linear-gradient(160deg, rgba(250, 246, 240, 0.92) 0%, rgba(238, 229, 216, 0.9) 100%);
+  --hero-glow: radial-gradient(circle, rgba(122, 148, 165, 0.25) 0%, transparent 65%);
+  --heading-color: #2f2a25;
+  --badge-bg: rgba(252, 247, 241, 0.9);
+  --badge-border: rgba(122, 148, 165, 0.35);
+  --badge-text: #4f697a;
+  --field-border: #c6b8aa;
+  --field-bg: rgba(255, 251, 246, 0.9);
+  --field-text: #443e39;
+  --field-placeholder: #968b80;
+  --button-start: #6f899a;
+  --button-end: #8ba4b2;
+  --button-shadow: 0 10px 24px rgba(86, 111, 126, 0.32);
+  --button-shadow-hover: 0 14px 28px rgba(86, 111, 126, 0.4);
+  --button-focus: rgba(111, 137, 154, 0.28);
+  --button-secondary-border: rgba(92, 85, 79, 0.3);
+  --button-secondary-bg-hover: rgba(248, 241, 232, 0.84);
+  --button-secondary-text: #5a5147;
+  --fact-bg: rgba(247, 241, 233, 0.88);
+  --fact-border: rgba(122, 148, 165, 0.28);
+  --fact-text: #3e3832;
+  --dialog-backdrop: rgba(49, 41, 33, 0.38);
 }
 
 *,
@@ -166,6 +167,10 @@
 body {
   margin: 0;
   background: var(--bg-layer);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
   color: var(--text-primary);
   min-height: 100dvh;
 }
@@ -268,7 +273,7 @@ h2 {
 .game-page {
   min-height: calc(100dvh - 1rem);
   display: grid;
-  align-content: stretch;
+  align-content: center;
 }
 
 .registration-page {
@@ -506,8 +511,7 @@ button:disabled {
 .deck-playground {
   display: grid;
   gap: var(--space-3);
-  min-height: calc(100dvh - 5.2rem);
-  align-content: space-between;
+  align-content: center;
 }
 
 .deck-stage {
@@ -678,6 +682,10 @@ button:disabled {
 }
 
 @media (max-width: 640px) {
+  body {
+    background-attachment: scroll;
+  }
+
   .hero {
     padding: var(--space-4) var(--space-4) var(--space-5);
   }
@@ -692,6 +700,7 @@ button:disabled {
 
   .game-page {
     min-height: calc(100dvh - 0.6rem);
+    align-content: center;
   }
 
   .registration-page {
@@ -700,10 +709,6 @@ button:disabled {
 
   .card {
     padding: var(--space-4);
-  }
-
-  .deck-playground {
-    min-height: calc(100dvh - 5.1rem);
   }
 
   .fact {

@@ -26,6 +26,18 @@ export function GuestFactCard({
   onSubmitGuess,
   onSkip,
 }: GuestFactCardProps) {
+  const toConversationPrompt = (fact: string): string => {
+    const trimmed = fact.trim()
+    if (!trimmed) {
+      return ''
+    }
+    const normalized = trimmed.toLowerCase()
+    if (normalized.includes('ask ') || trimmed.includes('?')) {
+      return trimmed
+    }
+    return `${trimmed}... ask me for the story behind it`
+  }
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     onSubmitGuess()
@@ -43,16 +55,17 @@ export function GuestFactCard({
 
         <article className="guest-card card guest-card--current">
           <header className="card-header">
-          <p className="section-kicker">Who said this?</p>
+            <p className="section-kicker">😏 This you?</p>
+            <h2>Go find out.</h2>
           </header>
-          <p className="fact">{card.fact}</p>
+          <p className="fact">{toConversationPrompt(card.fact)}</p>
           <form onSubmit={handleSubmit} className="stack-form card-form">
             <label className="field">
-              <span>Type guest name</span>
+              <span>Who do you think this is?</span>
               <input
                 value={guessValue}
                 onChange={(event) => onGuessChange(event.target.value)}
-                placeholder="Who is this?"
+                placeholder="Take a guess or go ask them 👀"
                 required
                 disabled={submitting}
                 className={hasGuessError ? 'input-error' : ''}
@@ -60,14 +73,14 @@ export function GuestFactCard({
             </label>
             <div className="card-footer">
               <p className="card-stats card-stats--plain">
-                {cardsLeft} left · {solvedCount} solved
+                {cardsLeft} left · {solvedCount} found
               </p>
               <div className="action-bar action-bar--card">
                 <button type="button" className="button-secondary" onClick={onSkip} disabled={submitting}>
-                  Skip for now
+                  Skip (need more clues)
                 </button>
                 <button type="submit" className="button-primary" disabled={submitting}>
-                  {submitting ? 'Submitting...' : 'Submit'}
+                  {submitting ? 'Sending...' : "That's my guess"}
                 </button>
               </div>
             </div>

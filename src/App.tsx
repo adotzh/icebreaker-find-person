@@ -281,7 +281,7 @@ function App() {
         setShowSuccessPopup(true)
         pendingSuccessCardIdRef.current = currentCard.id
         setStatus({
-          message: 'Nice catch.',
+          message: 'Nice. You found them.',
           variant: 'success',
         })
         setGuessInput('')
@@ -298,7 +298,7 @@ function App() {
         setShowSuccessPopup(false)
         setShowFailedPopup(true)
         setStatus({
-          message: 'Not this one.',
+          message: 'Not them. But now you know one more person.',
           variant: 'info',
         })
         if (failedPopupTimerRef.current) {
@@ -494,7 +494,7 @@ function App() {
       <ResultPopup
         open={showSuccessPopup}
         variant="success"
-        title="Nice catch"
+        title="Nice. You found them."
         subtitle="Loading the next card..."
         onClose={() => {
           if (advanceTimerRef.current) {
@@ -507,8 +507,8 @@ function App() {
       <ResultPopup
         open={showFailedPopup}
         variant="failed"
-        title="Not this one"
-        subtitle="Try another guess or skip."
+        title="Not them. But now you know one more person."
+        subtitle="Take another guess or keep exploring."
         onClose={() => {
           if (failedPopupTimerRef.current) {
             window.clearTimeout(failedPopupTimerRef.current)
